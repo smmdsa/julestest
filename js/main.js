@@ -1,36 +1,3 @@
-// --- Setup and Configuration ---
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-
-// Calculate canvas size to fill 90% of viewport
-const viewportWidth = window.innerWidth;
-const viewportHeight = window.innerHeight;
-const targetWidth = Math.floor(viewportWidth * 0.9);
-const targetHeight = Math.floor(viewportHeight * 0.9);
-
-// Maintain 16:10 aspect ratio (like original 640x400)
-const aspectRatio = 16 / 10;
-let screenWidth, screenHeight;
-
-if (targetWidth / targetHeight > aspectRatio) {
-    // Height is the limiting factor
-    screenHeight = targetHeight;
-    screenWidth = Math.floor(screenHeight * aspectRatio);
-} else {
-    // Width is the limiting factor
-    screenWidth = targetWidth;
-    screenHeight = Math.floor(screenWidth / aspectRatio);
-}
-
-// Set canvas dimensions
-canvas.width = screenWidth;
-canvas.height = screenHeight;
-canvas.style.width = screenWidth + 'px';
-canvas.style.height = screenHeight + 'px';
-
-// UI scaling factor based on canvas size
-const uiScale = screenWidth / 640;
-
 // --- Game Constants ---
 const MAX_HEALTH = 100;
 const MAX_SHIELD = 100;
@@ -43,83 +10,12 @@ const ENEMY_TYPES = {
     'boss': { health: 500, damage: 50, color: '#ff00ff', scale: 1.5, aspectRatio: 0.8, score: 1000, attackCooldown: 60 }
 };
 
-// --- Texture Generation ---
-const textureWidth = 64;
-const textureHeight = 64;
-const textures = {};
-
-function generateBrickTexture() {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = textureWidth;
-    canvas.height = textureHeight;
-
-    // Base brick color
-    ctx.fillStyle = '#8B4513'; // SaddleBrown
-    ctx.fillRect(0, 0, textureWidth, textureHeight);
-
-    // Mortar
-    ctx.strokeStyle = '#A0522D'; // Sienna
-    ctx.lineWidth = 1;
-
-    for (let y = 0; y < textureHeight; y += 16) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(textureWidth, y);
-        ctx.stroke();
-        for (let x = 0; x < textureWidth; x += 32) {
-            let offset = (y / 16) % 2 === 0 ? 0 : 16;
-            ctx.beginPath();
-            ctx.moveTo(x + offset, y);
-            ctx.lineTo(x + offset, y + 16);
-            ctx.stroke();
-        }
-    }
-    return ctx.getImageData(0, 0, textureWidth, textureHeight);
-}
-
-
-function generateDungeonFloorTexture() {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = textureWidth;
-    canvas.height = textureHeight;
-
-    // Base stone color
-    ctx.fillStyle = '#696969'; // DimGray
-    ctx.fillRect(0, 0, textureWidth, textureHeight);
-
-    // Cracks and details
-    ctx.strokeStyle = '#555555';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    for (let i = 0; i < 40; i++) {
-        const x1 = Math.random() * textureWidth;
-        const y1 = Math.random() * textureHeight;
-        const x2 = x1 + (Math.random() - 0.5) * 20;
-        const y2 = y1 + (Math.random() - 0.5) * 20;
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-    }
-    ctx.stroke();
-
-    // Highlights and shadows
-    for (let i = 0; i < 2000; i++) {
-        const x = Math.random() * textureWidth;
-        const y = Math.random() * textureHeight;
-        const color = Math.random() > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
-        ctx.fillStyle = color;
-        ctx.fillRect(x, y, 2, 2);
-    }
-
-    return ctx.getImageData(0, 0, textureWidth, textureHeight);
-}
-
-
-textures.wall = generateBrickTexture();
-textures.floor = generateDungeonFloorTexture();
-textures.ceiling = generateDungeonFloorTexture(); // Using floor for ceiling for now
-
+// --- Setup and Configuration ---
+// Canvas, dimensions, and textures are now handled by setup.js
+// Initialize canvas and generate textures
+initializeCanvas();
+generateTextures();
+setupInputHandlers();
 
 // --- Game State ---
 let gameState = {
@@ -141,7 +37,7 @@ let gameState = {
     mapWidth: 25, // Must be odd
     mapHeight: 25, // Must be odd
     sprites: [],
-    zBuffer: new Array(screenWidth)
+    zBuffer: new Array(screenWidth) // Initialized after canvas setup
 };
 
 // --- Notification System ---
@@ -152,30 +48,7 @@ function showNotification(message, duration = 120) { // 120 frames = 2 seconds a
     notification.timer = duration;
 }
 
-// --- Input Handling ---
-const keys = {};
-document.addEventListener('keydown', (e) => { keys[e.code] = true; });
-document.addEventListener('keyup', (e) => { keys[e.code] = false; });
-canvas.addEventListener('click', () => {
-    audioManager.init(); // Initialize audio on first click
-    canvas.requestPointerLock();
-    shoot();
-});
-document.addEventListener('pointerlockchange', () => {
-    if (document.pointerLockElement === canvas) document.addEventListener("mousemove", updateRotation, false);
-    else document.removeEventListener("mousemove", updateRotation, false);
-}, false);
 
-function updateRotation(e) {
-    const rotAmount = e.movementX * 0.002;
-    const p = gameState.player;
-    const oldDirX = p.dirX;
-    p.dirX = p.dirX * Math.cos(-rotAmount) - p.dirY * Math.sin(-rotAmount);
-    p.dirY = oldDirX * Math.sin(-rotAmount) + p.dirY * Math.cos(-rotAmount);
-    const oldPlaneX = p.planeX;
-    p.planeX = p.planeX * Math.cos(-rotAmount) - p.planeY * Math.sin(-rotAmount);
-    p.planeY = oldPlaneX * Math.sin(-rotAmount) + p.planeY * Math.cos(-rotAmount);
-}
 
 // --- Map Generation (Randomized DFS Maze) ---
 function generateMap() {
@@ -937,5 +810,7 @@ generateLevel(1).then(() => {
         audioManager.startLoFiSound();
         startMessage.remove();
         canvas.removeEventListener('click', initGame);
+        // Set up the ongoing click handler for gameplay
+        setupCanvasClickHandler();
     }, { once: true });
 });
