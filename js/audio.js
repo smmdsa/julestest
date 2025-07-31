@@ -1,8 +1,21 @@
 class AudioManager {
     constructor() {
-        this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        this.audioCtx = null;
         this.sounds = {};
         this.isMuted = false;
+        this.initialized = false;
+    }
+
+    init() {
+        if (!this.initialized) {
+            try {
+                this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                this.initialized = true;
+                console.log('Audio initialized');
+            } catch (e) {
+                console.warn('Audio not supported:', e);
+            }
+        }
     }
 
     // --- Sound Generation ---
@@ -12,13 +25,17 @@ class AudioManager {
     }
 
     play(name) {
-        if (this.isMuted || !this.sounds[name]) return;
-        const sound = this.sounds[name](this.audioCtx);
-        sound.source.start(0);
+        if (this.isMuted || !this.sounds[name] || !this.audioCtx) return;
+        try {
+            const sound = this.sounds[name](this.audioCtx);
+            sound.source.start(0);
+        } catch (e) {
+            console.warn('Audio play error:', e);
+        }
     }
 
     startLoFiSound() {
-        if (this.isMuted) return;
+        if (this.isMuted || !this.audioCtx) return;
         const audioCtx = this.audioCtx;
         const bufferSize = 4096;
         const noise = audioCtx.createScriptProcessor(bufferSize, 1, 1);

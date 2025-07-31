@@ -113,7 +113,8 @@ let gameState = {
         clipAmmo: CLIP_SIZE,
         score: 0,
         isHit: 0,
-        hasKey: false
+        hasKey: false,
+        stepTimer: 0
     },
     map: [],
     mapWidth: 25, // Must be odd
@@ -126,7 +127,11 @@ let gameState = {
 const keys = {};
 document.addEventListener('keydown', (e) => { keys[e.code] = true; });
 document.addEventListener('keyup', (e) => { keys[e.code] = false; });
-canvas.addEventListener('click', () => { canvas.requestPointerLock(); shoot(); });
+canvas.addEventListener('click', () => { 
+    audioManager.init(); // Initialize audio on first click
+    canvas.requestPointerLock(); 
+    shoot(); 
+});
 document.addEventListener('pointerlockchange', () => {
      if (document.pointerLockElement === canvas) document.addEventListener("mousemove", updateRotation, false);
      else document.removeEventListener("mousemove", updateRotation, false);
@@ -355,7 +360,13 @@ function updateState() {
         if (gameState.map[Math.floor(p.y - p.planeY * moveSpeed)][Math.floor(p.x)] == 0) { p.y -= p.planeY * moveSpeed; isMoving = true; }
     }
     if (isMoving) {
-        audioManager.play('step');
+        p.stepTimer++;
+        if (p.stepTimer >= 15) { // Play step sound every 15 frames when moving
+            audioManager.play('step');
+            p.stepTimer = 0;
+        }
+    } else {
+        p.stepTimer = 0;
     }
     if (keys['KeyR']) reload();
 
@@ -459,7 +470,7 @@ function render() {
             const texIndex = (ty * textureWidth + tx) * 4;
             const screenIndex = (y * screenWidth + x) * 4;
 
-            const shade = Math.min(1, rowDistance / 15); // Add distance shading
+            const shade = Math.max(0.3, 1 - rowDistance / 15); // Add distance shading
 
             screenImageData.data[screenIndex] = texture.data[texIndex] * shade;
             screenImageData.data[screenIndex + 1] = texture.data[texIndex + 1] * shade;
@@ -521,7 +532,8 @@ function render() {
             const wallTexIndex = (texY * textureWidth + texX) * 4;
             const screenIndex = (y * screenWidth + x) * 4;
 
-            const shade = side === 1 ? 0.7 : 1.0;
+            const distanceShade = Math.max(0.3, 1 - perpWallDist / 15);
+            const shade = (side === 1 ? 0.7 : 1.0) * distanceShade;
 
             screenImageData.data[screenIndex] = textures.wall.data[wallTexIndex] * shade;
             screenImageData.data[screenIndex + 1] = textures.wall.data[wallTexIndex + 1] * shade;
@@ -651,6 +663,30 @@ function gameLoop() {
 }
 
 generateLevel(1).then(() => {
-    audioManager.startLoFiSound();
     gameLoop();
+    
+    // Add click to start message
+    const startMessage = document.createElement('div');
+    startMessage.style.cssText = `
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0,0,0,0.8);
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+        z-index: 1000;
+        font-family: 'Courier New', monospace;
+    `;
+    startMessage.innerHTML = 'Click to Start Game<br><small>Audio will be enabled</small>';
+    document.body.appendChild(startMessage);
+    
+    canvas.addEventListener('click', function initGame() {
+        audioManager.init();
+        audioManager.startLoFiSound();
+        startMessage.remove();
+        canvas.removeEventListener('click', initGame);
+    }, { once: true });
 });
