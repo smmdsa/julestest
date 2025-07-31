@@ -179,6 +179,7 @@ function shoot() {
     const p = gameState.player;
     if (p.clipAmmo > 0) {
         p.clipAmmo--;
+        audioManager.play('shot');
         let hitSprite = null;
         let closestDist = Infinity;
         for(let i = 0; i < gameState.sprites.length; i++) {
@@ -202,6 +203,7 @@ function shoot() {
         if (hitSprite) {
             hitSprite.health -= 50;
             hitSprite.isHit = 5;
+            audioManager.play('enemy_damage');
             if (hitSprite.health <= 0 && hitSprite.state !== 'dead') {
                 hitSprite.state = 'dead';
                 p.score += ENEMY_TYPES[hitSprite.subType].score;
@@ -220,6 +222,7 @@ function reload() {
     const ammoToMove = Math.min(ammoNeeded, p.ammo);
     p.clipAmmo += ammoToMove;
     p.ammo -= ammoToMove;
+    audioManager.play('reload');
 }
 
 function playerTakeDamage(damage) {
@@ -229,6 +232,7 @@ function playerTakeDamage(damage) {
     p.shield -= shieldDamage;
     const healthDamage = damage - shieldDamage;
     p.health -= healthDamage;
+    audioManager.play('player_damage');
     if (p.health <= 0) {
         p.health = 0;
         alert(`GAME OVER! Final Score: ${p.score} on Level ${gameState.currentLevel}`);
@@ -255,21 +259,25 @@ function isVisible(start, end) {
 function updateState() {
     const p = gameState.player;
     const moveSpeed = p.moveSpeed;
+    let isMoving = false;
     if (keys['KeyW'] || keys['ArrowUp']) {
-        if (gameState.map[Math.floor(p.y)][Math.floor(p.x + p.dirX * moveSpeed)] == 0) p.x += p.dirX * moveSpeed;
-        if (gameState.map[Math.floor(p.y + p.dirY * moveSpeed)][Math.floor(p.x)] == 0) p.y += p.dirY * moveSpeed;
+        if (gameState.map[Math.floor(p.y)][Math.floor(p.x + p.dirX * moveSpeed)] == 0) { p.x += p.dirX * moveSpeed; isMoving = true; }
+        if (gameState.map[Math.floor(p.y + p.dirY * moveSpeed)][Math.floor(p.x)] == 0) { p.y += p.dirY * moveSpeed; isMoving = true; }
     }
     if (keys['KeyS'] || keys['ArrowDown']) {
-        if (gameState.map[Math.floor(p.y)][Math.floor(p.x - p.dirX * moveSpeed)] == 0) p.x -= p.dirX * moveSpeed;
-        if (gameState.map[Math.floor(p.y - p.dirY * moveSpeed)][Math.floor(p.x)] == 0) p.y -= p.dirY * moveSpeed;
+        if (gameState.map[Math.floor(p.y)][Math.floor(p.x - p.dirX * moveSpeed)] == 0) { p.x -= p.dirX * moveSpeed; isMoving = true; }
+        if (gameState.map[Math.floor(p.y - p.dirY * moveSpeed)][Math.floor(p.x)] == 0) { p.y -= p.dirY * moveSpeed; isMoving = true; }
     }
     if (keys['KeyD']) {
-        if (gameState.map[Math.floor(p.y)][Math.floor(p.x + p.planeX * moveSpeed)] == 0) p.x += p.planeX * moveSpeed;
-        if (gameState.map[Math.floor(p.y + p.planeY * moveSpeed)][Math.floor(p.x)] == 0) p.y += p.planeY * moveSpeed;
+        if (gameState.map[Math.floor(p.y)][Math.floor(p.x + p.planeX * moveSpeed)] == 0) { p.x += p.planeX * moveSpeed; isMoving = true; }
+        if (gameState.map[Math.floor(p.y + p.planeY * moveSpeed)][Math.floor(p.x)] == 0) { p.y += p.planeY * moveSpeed; isMoving = true; }
     }
     if (keys['KeyA']) {
-        if (gameState.map[Math.floor(p.y)][Math.floor(p.x - p.planeX * moveSpeed)] == 0) p.x -= p.planeX * moveSpeed;
-        if (gameState.map[Math.floor(p.y - p.planeY * moveSpeed)][Math.floor(p.x)] == 0) p.y -= p.planeY * moveSpeed;
+        if (gameState.map[Math.floor(p.y)][Math.floor(p.x - p.planeX * moveSpeed)] == 0) { p.x -= p.planeX * moveSpeed; isMoving = true; }
+        if (gameState.map[Math.floor(p.y - p.planeY * moveSpeed)][Math.floor(p.x)] == 0) { p.y -= p.planeY * moveSpeed; isMoving = true; }
+    }
+    if (isMoving) {
+        audioManager.play('step');
     }
     if (keys['KeyR']) reload();
 
@@ -279,10 +287,14 @@ function updateState() {
 
         if (dist < 0.5) {
             if (sprite.type === 'pickup') {
-                if (sprite.subType === 'ammo' && p.ammo < MAX_AMMO_CARRY) { p.ammo = Math.min(MAX_AMMO_CARRY, p.ammo + CLIP_SIZE); p.score += 10; gameState.sprites.splice(i, 1); }
-                if (sprite.subType === 'health' && p.health < MAX_HEALTH) { p.health = Math.min(MAX_HEALTH, p.health + 25); p.score += 10; gameState.sprites.splice(i, 1); }
-                if (sprite.subType === 'shield' && p.shield < MAX_SHIELD) { p.shield = Math.min(MAX_SHIELD, p.shield + 50); p.score += 10; gameState.sprites.splice(i, 1); }
-                if (sprite.subType === 'key') { p.hasKey = true; p.score += 500; gameState.sprites.splice(i, 1); }
+                let pickedUp = false;
+                if (sprite.subType === 'ammo' && p.ammo < MAX_AMMO_CARRY) { p.ammo = Math.min(MAX_AMMO_CARRY, p.ammo + CLIP_SIZE); p.score += 10; gameState.sprites.splice(i, 1); pickedUp = true; }
+                if (sprite.subType === 'health' && p.health < MAX_HEALTH) { p.health = Math.min(MAX_HEALTH, p.health + 25); p.score += 10; gameState.sprites.splice(i, 1); pickedUp = true; }
+                if (sprite.subType === 'shield' && p.shield < MAX_SHIELD) { p.shield = Math.min(MAX_SHIELD, p.shield + 50); p.score += 10; gameState.sprites.splice(i, 1); pickedUp = true; }
+                if (sprite.subType === 'key') { p.hasKey = true; p.score += 500; gameState.sprites.splice(i, 1); pickedUp = true; }
+                if (pickedUp) {
+                    audioManager.play('pickup');
+                }
             } else if (sprite.type === 'exit' && p.hasKey) {
                 generateLevel(gameState.currentLevel + 1);
                 return; // Stop processing this frame
@@ -498,4 +510,7 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-generateLevel(1).then(gameLoop);
+generateLevel(1).then(() => {
+    audioManager.startLoFiSound();
+    gameLoop();
+});

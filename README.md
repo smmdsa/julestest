@@ -11,6 +11,7 @@ The project is structured as follows:
   - `style.css`: The main stylesheet for the game.
 - `js/`: This directory contains the JavaScript files for the project.
   - `main.js`: The main JavaScript file that contains the game logic.
+  - `audio.js`: The file that contains the audio logic.
 
 ## How to Play
 
