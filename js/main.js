@@ -1,24 +1,46 @@
 // --- Setup and Configuration ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const loadingScreen = document.getElementById('loading-screen');
 
-const screenWidth = 640;
-const screenHeight = 400;
+// Calculate canvas size to fill 90% of viewport
+const viewportWidth = window.innerWidth;
+const viewportHeight = window.innerHeight;
+const targetWidth = Math.floor(viewportWidth * 0.9);
+const targetHeight = Math.floor(viewportHeight * 0.9);
+
+// Maintain 16:10 aspect ratio (like original 640x400)
+const aspectRatio = 16 / 10;
+let screenWidth, screenHeight;
+
+if (targetWidth / targetHeight > aspectRatio) {
+    // Height is the limiting factor
+    screenHeight = targetHeight;
+    screenWidth = Math.floor(screenHeight * aspectRatio);
+} else {
+    // Width is the limiting factor
+    screenWidth = targetWidth;
+    screenHeight = Math.floor(screenWidth / aspectRatio);
+}
+
+// Set canvas dimensions
 canvas.width = screenWidth;
 canvas.height = screenHeight;
+canvas.style.width = screenWidth + 'px';
+canvas.style.height = screenHeight + 'px';
+
+// UI scaling factor based on canvas size
+const uiScale = screenWidth / 640;
 
 // --- Game Constants ---
 const MAX_HEALTH = 100;
 const MAX_SHIELD = 100;
-const CLIP_SIZE = 15;
-const MAX_AMMO_CARRY = 50;
+const MAX_AMMO_CARRY = 200; // Increased for machine gun
 
 const ENEMY_TYPES = {
-    'grunt':    { health: 100, damage: 10, color: '#00ff00', scale: 1.0, aspectRatio: 0.8, score: 100, attackCooldown: 120 },
+    'grunt': { health: 100, damage: 10, color: '#00ff00', scale: 1.0, aspectRatio: 0.8, score: 100, attackCooldown: 120 },
     'sergeant': { health: 150, damage: 20, color: '#00bfff', scale: 1.1, aspectRatio: 0.8, score: 200, attackCooldown: 100 },
-    'commander':{ health: 200, damage: 30, color: '#ff4500', scale: 1.2, aspectRatio: 0.8, score: 300, attackCooldown: 80 },
-    'boss':     { health: 500, damage: 50, color: '#ff00ff', scale: 1.5, aspectRatio: 0.8, score: 1000, attackCooldown: 60 }
+    'commander': { health: 200, damage: 30, color: '#ff4500', scale: 1.2, aspectRatio: 0.8, score: 300, attackCooldown: 80 },
+    'boss': { health: 500, damage: 50, color: '#ff00ff', scale: 1.5, aspectRatio: 0.8, score: 1000, attackCooldown: 60 }
 };
 
 // --- Texture Generation ---
@@ -110,7 +132,6 @@ let gameState = {
         health: MAX_HEALTH,
         shield: 0,
         ammo: MAX_AMMO_CARRY,
-        clipAmmo: CLIP_SIZE,
         score: 0,
         isHit: 0,
         hasKey: false,
@@ -123,18 +144,26 @@ let gameState = {
     zBuffer: new Array(screenWidth)
 };
 
+// --- Notification System ---
+let notification = { message: '', timer: 0 };
+
+function showNotification(message, duration = 120) { // 120 frames = 2 seconds at 60fps
+    notification.message = message;
+    notification.timer = duration;
+}
+
 // --- Input Handling ---
 const keys = {};
 document.addEventListener('keydown', (e) => { keys[e.code] = true; });
 document.addEventListener('keyup', (e) => { keys[e.code] = false; });
-canvas.addEventListener('click', () => { 
+canvas.addEventListener('click', () => {
     audioManager.init(); // Initialize audio on first click
-    canvas.requestPointerLock(); 
-    shoot(); 
+    canvas.requestPointerLock();
+    shoot();
 });
 document.addEventListener('pointerlockchange', () => {
-     if (document.pointerLockElement === canvas) document.addEventListener("mousemove", updateRotation, false);
-     else document.removeEventListener("mousemove", updateRotation, false);
+    if (document.pointerLockElement === canvas) document.addEventListener("mousemove", updateRotation, false);
+    else document.removeEventListener("mousemove", updateRotation, false);
 }, false);
 
 function updateRotation(e) {
@@ -175,10 +204,10 @@ function generateMap() {
 
     // Open up some dead ends to make it less maze-like
     let openings = (w * h) / 10;
-    while(openings > 0) {
+    while (openings > 0) {
         const x = Math.floor(Math.random() * (w - 2)) + 1;
         const y = Math.floor(Math.random() * (h - 2)) + 1;
-        if(map[y][x] === 1) {
+        if (map[y][x] === 1) {
             map[y][x] = 0;
             openings--;
         }
@@ -200,19 +229,19 @@ async function generateLevel(level) {
     const emptyTiles = [];
     for (let y = 0; y < gameState.mapHeight; y++) {
         for (let x = 0; x < gameState.mapWidth; x++) {
-            if (gameState.map[y][x] === 0) emptyTiles.push({x: x + 0.5, y: y + 0.5});
+            if (gameState.map[y][x] === 0) emptyTiles.push({ x: x + 0.5, y: y + 0.5 });
         }
     }
 
     const placeItem = (count, type, subType) => {
-        for(let i=0; i<count; i++) {
-            if(emptyTiles.length === 0) return;
+        for (let i = 0; i < count; i++) {
+            if (emptyTiles.length === 0) return;
             const tileIndex = Math.floor(Math.random() * emptyTiles.length);
             const tile = emptyTiles.splice(tileIndex, 1)[0];
             if (type === 'enemy') {
-                 gameState.sprites.push({x: tile.x, y: tile.y, type: 'enemy', subType: subType, health: ENEMY_TYPES[subType].health, state: 'idle', isHit: 0, attackTimer: 0});
+                gameState.sprites.push({ x: tile.x, y: tile.y, type: 'enemy', subType: subType, health: ENEMY_TYPES[subType].health, state: 'idle', isHit: 0, attackTimer: 0 });
             } else {
-                 gameState.sprites.push({x: tile.x, y: tile.y, type: 'pickup', subType: subType});
+                gameState.sprites.push({ x: tile.x, y: tile.y, type: 'pickup', subType: subType });
             }
         }
     };
@@ -228,18 +257,24 @@ async function generateLevel(level) {
     placeItem(Math.floor(level / 3), 'enemy', 'commander');
     placeItem(1, 'enemy', 'boss'); // Always one boss
 
-    placeItem(Math.max(1, 5 - Math.floor(level/2)), 'pickup', 'ammo');
-    placeItem(Math.max(1, 4 - Math.floor(level/2)), 'pickup', 'health');
-    placeItem(Math.max(1, 3 - Math.floor(level/3)), 'pickup', 'shield');
+    placeItem(Math.max(1, 5 - Math.floor(level / 2)), 'pickup', 'ammo');
+    placeItem(Math.max(1, 4 - Math.floor(level / 2)), 'pickup', 'health');
+    placeItem(Math.max(1, 3 - Math.floor(level / 3)), 'pickup', 'shield');
+
+    // Place weapon pickups (less frequent)
+    if (level >= 2) placeItem(1, 'pickup', 'shotgun');
+    if (level >= 4) placeItem(1, 'pickup', 'machinegun');
 
     hideLoadingScreen();
 }
 
+let isLoading = false;
+
 function showLoadingScreen() {
-    loadingScreen.style.top = '0';
+    isLoading = true;
 }
 function hideLoadingScreen() {
-    loadingScreen.style.top = '-100%';
+    isLoading = false;
 }
 
 function spawnExitDoor() {
@@ -247,45 +282,23 @@ function spawnExitDoor() {
     for (let y = 0; y < gameState.mapHeight; y++) {
         for (let x = 0; x < gameState.mapWidth; x++) {
             if (gameState.map[y][x] === 0 && Math.hypot(x - gameState.player.x, y - gameState.player.y) > 10) {
-                 emptyTiles.push({x: x + 0.5, y: y + 0.5});
+                emptyTiles.push({ x: x + 0.5, y: y + 0.5 });
             }
         }
     }
-    if(emptyTiles.length > 0) {
+    if (emptyTiles.length > 0) {
         const tile = emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
-        gameState.sprites.push({x: tile.x, y: tile.y, type: 'exit'});
+        gameState.sprites.push({ x: tile.x, y: tile.y, type: 'exit' });
     }
 }
 
 // --- Game Logic ---
 function shoot() {
-    const p = gameState.player;
-    if (p.clipAmmo > 0) {
-        p.clipAmmo--;
-        audioManager.play('shot');
-        
-        // Create a visible bullet projectile
-        gameState.sprites.push({
-            type: 'playerBullet',
-            x: p.x,
-            y: p.y,
-            dirX: p.dirX,
-            dirY: p.dirY,
-            speed: 0.2,
-            damage: 50,
-            color: '#FFFF00',
-            lifetime: 100 // Maximum frames the bullet can exist
-        });
-    }
+    weaponManager.shoot(gameState.player);
 }
 
 function reload() {
-    const p = gameState.player;
-    const ammoNeeded = CLIP_SIZE - p.clipAmmo;
-    const ammoToMove = Math.min(ammoNeeded, p.ammo);
-    p.clipAmmo += ammoToMove;
-    p.ammo -= ammoToMove;
-    audioManager.play('reload');
+    weaponManager.startReload();
 }
 
 function playerTakeDamage(damage) {
@@ -350,6 +363,14 @@ function updateState() {
     }
     if (keys['KeyR']) reload();
 
+    // Weapon switching
+    if (keys['Digit1']) weaponManager.switchWeapon('pistol');
+    if (keys['Digit2']) weaponManager.switchWeapon('shotgun');
+    if (keys['Digit3']) weaponManager.switchWeapon('machinegun');
+
+    // Update weapon manager
+    weaponManager.update();
+
     for (let i = gameState.sprites.length - 1; i >= 0; i--) {
         const sprite = gameState.sprites[i];
         const dist = Math.hypot(p.x - sprite.x, p.y - sprite.y);
@@ -357,10 +378,17 @@ function updateState() {
         if (dist < 0.5) {
             if (sprite.type === 'pickup') {
                 let pickedUp = false;
-                if (sprite.subType === 'ammo' && p.ammo < MAX_AMMO_CARRY) { p.ammo = Math.min(MAX_AMMO_CARRY, p.ammo + CLIP_SIZE); p.score += 10; gameState.sprites.splice(i, 1); pickedUp = true; }
+                if (sprite.subType === 'ammo' && p.ammo < MAX_AMMO_CARRY) { p.ammo = Math.min(MAX_AMMO_CARRY, p.ammo + 30); p.score += 10; gameState.sprites.splice(i, 1); pickedUp = true; }
                 if (sprite.subType === 'health' && p.health < MAX_HEALTH) { p.health = Math.min(MAX_HEALTH, p.health + 25); p.score += 10; gameState.sprites.splice(i, 1); pickedUp = true; }
                 if (sprite.subType === 'shield' && p.shield < MAX_SHIELD) { p.shield = Math.min(MAX_SHIELD, p.shield + 50); p.score += 10; gameState.sprites.splice(i, 1); pickedUp = true; }
                 if (sprite.subType === 'key') { p.hasKey = true; p.score += 500; gameState.sprites.splice(i, 1); pickedUp = true; }
+                if (sprite.subType === 'shotgun' || sprite.subType === 'machinegun') {
+                    if (weaponManager.pickupWeapon(sprite.subType)) {
+                        p.score += 100;
+                        gameState.sprites.splice(i, 1);
+                        pickedUp = true;
+                    }
+                }
                 if (pickedUp) {
                     audioManager.play('pickup');
                 }
@@ -420,7 +448,7 @@ function updateState() {
             sprite.x += sprite.dirX * sprite.speed;
             sprite.y += sprite.dirY * sprite.speed;
             sprite.lifetime--;
-            
+
             // Check wall collision
             if (gameState.map[Math.floor(sprite.y)][Math.floor(sprite.x)] !== 0 || sprite.lifetime <= 0) {
                 // Create wall impact effect
@@ -437,7 +465,7 @@ function updateState() {
                 gameState.sprites.splice(i, 1);
                 continue;
             }
-            
+
             // Check enemy collision
             for (let j = 0; j < gameState.sprites.length; j++) {
                 const enemy = gameState.sprites[j];
@@ -448,16 +476,16 @@ function updateState() {
                         enemy.health -= sprite.damage;
                         enemy.isHit = 5;
                         audioManager.play('enemy_damage');
-                        
+
                         if (enemy.health <= 0 && enemy.state !== 'dead') {
                             enemy.state = 'dead';
                             p.score += ENEMY_TYPES[enemy.subType].score;
                             if (enemy.subType === 'boss') {
-                                gameState.sprites.push({x: enemy.x, y: enemy.y, type: 'pickup', subType: 'key'});
+                                gameState.sprites.push({ x: enemy.x, y: enemy.y, type: 'pickup', subType: 'key' });
                                 spawnExitDoor();
                             }
                         }
-                        
+
                         // Remove bullet
                         gameState.sprites.splice(i, 1);
                         break;
@@ -610,6 +638,8 @@ function render() {
                 else if (sprite.subType === 'health') spriteColor = '#ff0000';
                 else if (sprite.subType === 'shield') spriteColor = '#0000ff';
                 else if (sprite.subType === 'key') { spriteColor = '#f0e68c'; spriteScale = 0.4; }
+                else if (sprite.subType === 'shotgun') { spriteColor = WEAPON_TYPES.shotgun.pickupColor; spriteScale = 0.35; }
+                else if (sprite.subType === 'machinegun') { spriteColor = WEAPON_TYPES.machinegun.pickupColor; spriteScale = 0.35; }
             } else if (sprite.type === 'exit') {
                 spriteColor = '#ffffff'; spriteScale = 1.2; spriteAspectRatio = 0.5;
             } else if (sprite.type === 'projectile') {
@@ -635,18 +665,18 @@ function render() {
             for (let stripe = Math.floor(drawEndX - spriteWidth); stripe < Math.floor(drawEndX); stripe++) {
                 if (stripe >= 0 && stripe < screenWidth && transformY < gameState.zBuffer[stripe]) {
                     ctx.fillStyle = spriteColor;
-                    
+
                     // Special rendering for impact effects
                     if (sprite.type === 'impact') {
                         // Draw a burst pattern for impact effects
                         const centerX = spriteScreenX;
                         const centerY = drawStartY + spriteHeight / 2;
                         const radius = spriteHeight / 2;
-                        
+
                         ctx.beginPath();
                         ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
                         ctx.fill();
-                        
+
                         // Add some spark lines
                         ctx.strokeStyle = spriteColor;
                         ctx.lineWidth = 2;
@@ -665,7 +695,7 @@ function render() {
                     } else {
                         ctx.fillRect(stripe, drawStartY, 1, spriteHeight);
                     }
-                    
+
                     if (sprite.type === 'enemy' && sprite.state !== 'dead') {
                         const healthBarWidth = spriteWidth * (sprite.health / ENEMY_TYPES[sprite.subType].health);
                         ctx.fillStyle = 'red';
@@ -684,9 +714,9 @@ function render() {
     }
 
     // --- Minimap Rendering ---
-    const miniMapSize = 120;
-    const miniMapX = screenWidth - miniMapSize - 10;
-    const miniMapY = 10;
+    const miniMapSize = 120 * uiScale;
+    const miniMapX = screenWidth - miniMapSize - 10 * uiScale;
+    const miniMapY = 60 * uiScale; // Move down to avoid fullscreen button
     const tileSize = miniMapSize / gameState.mapWidth;
 
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
@@ -706,6 +736,7 @@ function render() {
         let color = null;
         if (sprite.type === 'enemy' && sprite.state !== 'dead') color = 'red';
         else if (sprite.type === 'pickup' && sprite.subType === 'key') color = '#f0e68c';
+        else if (sprite.type === 'pickup' && (sprite.subType === 'shotgun' || sprite.subType === 'machinegun')) color = '#00ff00';
         else if (sprite.type === 'exit') color = 'white';
 
         if (color) {
@@ -730,12 +761,148 @@ function render() {
     );
     ctx.stroke();
 
-    // --- UI Text ---
-    document.getElementById('level-ui').innerText = `Level: ${gameState.currentLevel}`;
-    document.getElementById('health-ui').innerText = `Health: ${p.health}`;
-    document.getElementById('shield-ui').innerText = `Shield: ${p.shield}`;
-    document.getElementById('ammo-ui').innerText = `Ammo: ${p.clipAmmo} / ${p.ammo}`;
-    document.getElementById('score-ui').innerText = `Score: ${p.score}`;
+    // --- In-Canvas UI Rendering ---
+    renderUI();
+
+    // --- Crosshair ---
+    ctx.fillStyle = 'white';
+    ctx.font = `${20 * uiScale}px Courier New`;
+    ctx.textAlign = 'center';
+    ctx.fillText('+', screenWidth / 2, screenHeight / 2 + 7 * uiScale);
+
+    // --- Loading Screen ---
+    if (isLoading) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+        ctx.fillRect(0, 0, screenWidth, screenHeight);
+
+        ctx.fillStyle = 'white';
+        ctx.font = `${32 * uiScale}px Courier New`;
+        ctx.textAlign = 'center';
+        ctx.fillText('Generating Level...', screenWidth / 2, screenHeight / 2);
+    }
+
+    // --- Notifications ---
+    if (notification.timer > 0) {
+        notification.timer--;
+        const alpha = Math.min(1, notification.timer / 30);
+        ctx.fillStyle = `rgba(0, 0, 0, ${0.8 * alpha})`;
+        const notifWidth = 400 * uiScale;
+        const notifHeight = 60 * uiScale;
+        const notifX = (screenWidth - notifWidth) / 2;
+        const notifY = (screenHeight - notifHeight) / 2;
+
+        ctx.fillRect(notifX, notifY, notifWidth, notifHeight);
+        ctx.strokeStyle = `rgba(136, 136, 136, ${alpha})`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(notifX, notifY, notifWidth, notifHeight);
+
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.font = `${16 * uiScale}px Courier New`;
+        ctx.textAlign = 'center';
+        ctx.fillText(notification.message, screenWidth / 2, screenHeight / 2 + 5 * uiScale);
+    }
+
+    function renderUI() {
+        const p = gameState.player;
+        const padding = 20 * uiScale;
+        const uiHeight = 100 * uiScale;
+
+        // Modern UI Background with gradient effect
+        const gradient = ctx.createLinearGradient(0, screenHeight - uiHeight, 0, screenHeight);
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 0.9)');
+        gradient.addColorStop(1, 'rgba(20, 20, 20, 0.95)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, screenHeight - uiHeight, screenWidth, uiHeight);
+
+        // Top border line
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.fillRect(0, screenHeight - uiHeight, screenWidth, 2);
+
+        // === LEFT SIDE: Health & Shield ===
+        const barWidth = 180 * uiScale;
+        const barHeight = 12 * uiScale;
+        const leftX = padding;
+        const topY = screenHeight - uiHeight + 20 * uiScale;
+
+        // Health Bar with emoji
+        ctx.font = `${18 * uiScale}px Arial`;
+        ctx.fillStyle = '#ff4444';
+        ctx.textAlign = 'left';
+        ctx.fillText('❤️', leftX, topY);
+
+        const healthBarX = leftX + 30 * uiScale;
+        // Health bar background
+        ctx.fillStyle = 'rgba(100, 0, 0, 0.5)';
+        ctx.fillRect(healthBarX, topY - 10 * uiScale, barWidth, barHeight);
+        // Health bar fill
+        ctx.fillStyle = '#ff4444';
+        ctx.fillRect(healthBarX, topY - 10 * uiScale, (p.health / MAX_HEALTH) * barWidth, barHeight);
+        // Health text
+        ctx.font = `${12 * uiScale}px Arial`;
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${p.health}`, healthBarX + barWidth / 2, topY - 2 * uiScale);
+
+        // Shield Bar (only if shield > 0)
+        if (p.shield > 0) {
+            const shieldY = topY + 25 * uiScale;
+            ctx.font = `${18 * uiScale}px Arial`;
+            ctx.fillStyle = '#4488ff';
+            ctx.textAlign = 'left';
+            ctx.fillText('🛡️', leftX, shieldY);
+
+            // Shield bar background
+            ctx.fillStyle = 'rgba(0, 0, 100, 0.5)';
+            ctx.fillRect(healthBarX, shieldY - 10 * uiScale, barWidth, barHeight);
+            // Shield bar fill
+            ctx.fillStyle = '#4488ff';
+            ctx.fillRect(healthBarX, shieldY - 10 * uiScale, (p.shield / MAX_SHIELD) * barWidth, barHeight);
+            // Shield text
+            ctx.font = `${12 * uiScale}px Arial`;
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${p.shield}`, healthBarX + barWidth / 2, shieldY - 2 * uiScale);
+        }
+
+        // === CENTER: Weapon Info ===
+        const centerX = screenWidth / 2;
+        const weaponY = screenHeight - uiHeight + 30 * uiScale;
+
+        ctx.font = `${16 * uiScale}px Arial`;
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+
+        let weaponText = `🔫 ${weaponManager.getWeaponName()}`;
+        if (weaponManager.isReloading) {
+            const progress = Math.floor(weaponManager.getReloadProgress() * 100);
+            weaponText = `🔄 Reloading ${progress}%`;
+            ctx.fillStyle = '#ffaa00';
+        }
+        ctx.fillText(weaponText, centerX, weaponY);
+
+        // Ammo display
+        ctx.font = `${14 * uiScale}px Arial`;
+        ctx.fillStyle = '#ffdd44';
+        ctx.fillText(`📦 ${weaponManager.getAmmoDisplay()}`, centerX, weaponY + 25 * uiScale);
+
+        // === RIGHT SIDE: Level & Score ===
+        const rightX = screenWidth - padding;
+
+        ctx.font = `${14 * uiScale}px Arial`;
+        ctx.fillStyle = '#44ff44';
+        ctx.textAlign = 'right';
+        ctx.fillText(`🏆 Level ${gameState.currentLevel}`, rightX, topY);
+
+        ctx.fillStyle = '#ffff44';
+        ctx.fillText(`💰 ${p.score.toLocaleString()}`, rightX, topY + 25 * uiScale);
+
+        // === BOTTOM: Controls ===
+        ctx.font = `${10 * uiScale}px Arial`;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.textAlign = 'center';
+        const controlsY = screenHeight - 8 * uiScale;
+        ctx.fillText('WASD: Move • Mouse: Look • Click: Shoot • R: Reload • 1/2/3: Switch Weapons', centerX, controlsY);
+    }
 }
 
 function gameLoop() {
@@ -746,7 +913,7 @@ function gameLoop() {
 
 generateLevel(1).then(() => {
     gameLoop();
-    
+
     // Add click to start message
     const startMessage = document.createElement('div');
     startMessage.style.cssText = `
@@ -764,7 +931,7 @@ generateLevel(1).then(() => {
     `;
     startMessage.innerHTML = 'Click to Start Game<br><small>Audio will be enabled</small>';
     document.body.appendChild(startMessage);
-    
+
     canvas.addEventListener('click', function initGame() {
         audioManager.init();
         audioManager.startLoFiSound();

@@ -175,3 +175,35 @@ audioManager.createSound('bullet_impact', (audioCtx) => {
 
     return { source: oscillator };
 });
+
+audioManager.createSound('shotgun_blast', (audioCtx) => {
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    oscillator.type = 'sawtooth';
+    oscillator.frequency.setValueAtTime(120, audioCtx.currentTime);
+    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+
+    oscillator.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.15);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+
+    return { source: oscillator };
+});
+
+audioManager.createSound('machine_gun', (audioCtx) => {
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    oscillator.type = 'square';
+    oscillator.frequency.setValueAtTime(180, audioCtx.currentTime);
+    gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
+
+    oscillator.frequency.exponentialRampToValueAtTime(60, audioCtx.currentTime + 0.06);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.06);
+
+    return { source: oscillator };
+});
