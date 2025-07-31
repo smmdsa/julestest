@@ -21,6 +21,84 @@ const ENEMY_TYPES = {
     'boss':     { health: 500, damage: 50, color: '#ff00ff', scale: 1.5, aspectRatio: 0.8, score: 1000, attackCooldown: 60 }
 };
 
+// --- Texture Generation ---
+const textureWidth = 64;
+const textureHeight = 64;
+const textures = {};
+
+function generateBrickTexture() {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = textureWidth;
+    canvas.height = textureHeight;
+
+    // Base brick color
+    ctx.fillStyle = '#8B4513'; // SaddleBrown
+    ctx.fillRect(0, 0, textureWidth, textureHeight);
+
+    // Mortar
+    ctx.strokeStyle = '#A0522D'; // Sienna
+    ctx.lineWidth = 1;
+
+    for (let y = 0; y < textureHeight; y += 16) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(textureWidth, y);
+        ctx.stroke();
+        for (let x = 0; x < textureWidth; x += 32) {
+            let offset = (y / 16) % 2 === 0 ? 0 : 16;
+            ctx.beginPath();
+            ctx.moveTo(x + offset, y);
+            ctx.lineTo(x + offset, y + 16);
+            ctx.stroke();
+        }
+    }
+    return ctx.getImageData(0, 0, textureWidth, textureHeight);
+}
+
+
+function generateDungeonFloorTexture() {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = textureWidth;
+    canvas.height = textureHeight;
+
+    // Base stone color
+    ctx.fillStyle = '#696969'; // DimGray
+    ctx.fillRect(0, 0, textureWidth, textureHeight);
+
+    // Cracks and details
+    ctx.strokeStyle = '#555555';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < 40; i++) {
+        const x1 = Math.random() * textureWidth;
+        const y1 = Math.random() * textureHeight;
+        const x2 = x1 + (Math.random() - 0.5) * 20;
+        const y2 = y1 + (Math.random() - 0.5) * 20;
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+    }
+    ctx.stroke();
+
+    // Highlights and shadows
+    for (let i = 0; i < 2000; i++) {
+        const x = Math.random() * textureWidth;
+        const y = Math.random() * textureHeight;
+        const color = Math.random() > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, 2, 2);
+    }
+
+    return ctx.getImageData(0, 0, textureWidth, textureHeight);
+}
+
+
+textures.wall = generateBrickTexture();
+textures.floor = generateDungeonFloorTexture();
+textures.ceiling = generateDungeonFloorTexture(); // Using floor for ceiling for now
+
+
 // --- Game State ---
 let gameState = {
     currentLevel: 1,
@@ -335,10 +413,49 @@ function updateState() {
 function render() {
     const p = gameState.player;
     ctx.clearRect(0, 0, screenWidth, screenHeight);
-    ctx.fillStyle = '#3c3c3c';
-    ctx.fillRect(0, 0, screenWidth, screenHeight / 2);
-    ctx.fillStyle = '#5a5a5a';
-    ctx.fillRect(0, screenHeight / 2, screenWidth, screenHeight);
+    const screenImageData = ctx.createImageData(screenWidth, screenHeight);
+
+    // --- Floor and Ceiling Texturing ---
+    for (let y = 0; y < screenHeight; y++) {
+        const isFloor = y > screenHeight / 2;
+        const rayDirX0 = p.dirX - p.planeX;
+        const rayDirY0 = p.dirY - p.planeY;
+        const rayDirX1 = p.dirX + p.planeX;
+        const rayDirY1 = p.dirY + p.planeY;
+
+        const p_ = isFloor ? (y - screenHeight / 2) : (screenHeight / 2 - y);
+        const posZ = 0.5 * screenHeight;
+        const rowDistance = posZ / p_;
+
+        const floorStepX = rowDistance * (rayDirX1 - rayDirX0) / screenWidth;
+        const floorStepY = rowDistance * (rayDirY1 - rayDirY0) / screenWidth;
+
+        let floorX = p.x + rowDistance * rayDirX0;
+        let floorY = p.y + rowDistance * rayDirY0;
+
+        for (let x = 0; x < screenWidth; x++) {
+            const cellX = Math.floor(floorX);
+            const cellY = Math.floor(floorY);
+
+            const tx = Math.floor(textureWidth * (floorX - cellX)) & (textureWidth - 1);
+            const ty = Math.floor(textureHeight * (floorY - cellY)) & (textureHeight - 1);
+
+            floorX += floorStepX;
+            floorY += floorStepY;
+
+            const texture = isFloor ? textures.floor : textures.ceiling;
+            const texIndex = (ty * textureWidth + tx) * 4;
+            const screenIndex = (y * screenWidth + x) * 4;
+
+            const shade = Math.min(1, rowDistance / 15); // Add distance shading
+
+            screenImageData.data[screenIndex] = texture.data[texIndex] * shade;
+            screenImageData.data[screenIndex + 1] = texture.data[texIndex + 1] * shade;
+            screenImageData.data[screenIndex + 2] = texture.data[texIndex + 2] * shade;
+            screenImageData.data[screenIndex + 3] = 255;
+        }
+    }
+
 
     for (let x = 0; x < screenWidth; x++) {
         const cameraX = 2 * x / screenWidth - 1;
@@ -366,18 +483,41 @@ function render() {
         gameState.zBuffer[x] = perpWallDist;
 
         const lineHeight = Math.floor(screenHeight / perpWallDist);
-        const drawStart = Math.max(0, -lineHeight / 2 + screenHeight / 2);
-        const drawEnd = Math.min(screenHeight - 1, lineHeight / 2 + screenHeight / 2);
+        const drawStart = Math.max(0, Math.floor(-lineHeight / 2 + screenHeight / 2));
+        const drawEnd = Math.min(screenHeight - 1, Math.floor(lineHeight / 2 + screenHeight / 2));
 
-        let color = '#800000';
-        if (side === 1) { color = '#b30000'; }
+        // --- Wall Texturing ---
+        let wallX; // where exactly the wall was hit
+        if (side === 0) {
+            wallX = p.y + perpWallDist * rayDirY;
+        } else {
+            wallX = p.x + perpWallDist * rayDirX;
+        }
+        wallX -= Math.floor(wallX);
 
-        ctx.strokeStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(x, drawStart);
-        ctx.lineTo(x, drawEnd);
-        ctx.stroke();
+        let texX = Math.floor(wallX * textureWidth);
+        if (side === 0 && rayDirX > 0) texX = textureWidth - texX - 1;
+        if (side === 1 && rayDirY < 0) texX = textureWidth - texX - 1;
+
+        const step = textureHeight / lineHeight;
+        let texPos = (drawStart - screenHeight / 2 + lineHeight / 2) * step;
+
+        for (let y = drawStart; y < drawEnd; y++) {
+            const texY = Math.floor(texPos) & (textureHeight - 1);
+            texPos += step;
+
+            const wallTexIndex = (texY * textureWidth + texX) * 4;
+            const screenIndex = (y * screenWidth + x) * 4;
+
+            const shade = side === 1 ? 0.7 : 1.0;
+
+            screenImageData.data[screenIndex] = textures.wall.data[wallTexIndex] * shade;
+            screenImageData.data[screenIndex + 1] = textures.wall.data[wallTexIndex + 1] * shade;
+            screenImageData.data[screenIndex + 2] = textures.wall.data[wallTexIndex + 2] * shade;
+            screenImageData.data[screenIndex + 3] = 255;
+        }
     }
+    ctx.putImageData(screenImageData, 0, 0);
 
     gameState.sprites.sort((a, b) => Math.hypot(b.x - p.x, b.y - p.y) - Math.hypot(a.x - p.x, a.y - p.y));
 
