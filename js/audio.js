@@ -159,3 +159,19 @@ audioManager.createSound('reload', (audioCtx) => {
 
     return { source: oscillator };
 });
+
+audioManager.createSound('bullet_impact', (audioCtx) => {
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    oscillator.type = 'triangle';
+    oscillator.frequency.setValueAtTime(150, audioCtx.currentTime);
+    gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+
+    oscillator.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.08);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+
+    return { source: oscillator };
+});

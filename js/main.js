@@ -263,39 +263,19 @@ function shoot() {
     if (p.clipAmmo > 0) {
         p.clipAmmo--;
         audioManager.play('shot');
-        let hitSprite = null;
-        let closestDist = Infinity;
-        for(let i = 0; i < gameState.sprites.length; i++) {
-             if (gameState.sprites[i].type === 'enemy' && gameState.sprites[i].state !== 'dead') {
-                const sprite = gameState.sprites[i];
-                const vecX = sprite.x - p.x;
-                const vecY = sprite.y - p.y;
-                const dist = vecX * vecX + vecY * vecY;
-                const angle = Math.atan2(vecY, vecX);
-                let playerAngle = Math.atan2(p.dirY, p.dirX);
-                let angleDiff = angle - playerAngle;
-                if (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-                if (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-
-                if (Math.abs(angleDiff) < 0.1 && dist < closestDist) {
-                    closestDist = dist;
-                    hitSprite = sprite;
-                }
-            }
-        }
-        if (hitSprite) {
-            hitSprite.health -= 50;
-            hitSprite.isHit = 5;
-            audioManager.play('enemy_damage');
-            if (hitSprite.health <= 0 && hitSprite.state !== 'dead') {
-                hitSprite.state = 'dead';
-                p.score += ENEMY_TYPES[hitSprite.subType].score;
-                if(hitSprite.subType === 'boss') {
-                    gameState.sprites.push({x: hitSprite.x, y: hitSprite.y, type: 'pickup', subType: 'key'});
-                    spawnExitDoor();
-                }
-            }
-        }
+        
+        // Create a visible bullet projectile
+        gameState.sprites.push({
+            type: 'playerBullet',
+            x: p.x,
+            y: p.y,
+            dirX: p.dirX,
+            dirY: p.dirY,
+            speed: 0.2,
+            damage: 50,
+            color: '#FFFF00',
+            lifetime: 100 // Maximum frames the bullet can exist
+        });
     }
 }
 
@@ -422,9 +402,71 @@ function updateState() {
             sprite.x += sprite.dirX * sprite.speed;
             sprite.y += sprite.dirY * sprite.speed;
             if (gameState.map[Math.floor(sprite.y)][Math.floor(sprite.x)] !== 0) {
+                // Create wall impact effect for enemy projectiles
+                gameState.sprites.push({
+                    type: 'impact',
+                    x: sprite.x,
+                    y: sprite.y,
+                    lifetime: 15,
+                    color: '#FF6600'
+                });
+                audioManager.play('bullet_impact');
                 gameState.sprites.splice(i, 1);
             } else if (Math.hypot(p.x - sprite.x, p.y - sprite.y) < 0.5) {
                 playerTakeDamage(sprite.damage);
+                gameState.sprites.splice(i, 1);
+            }
+        } else if (sprite.type === 'playerBullet') {
+            sprite.x += sprite.dirX * sprite.speed;
+            sprite.y += sprite.dirY * sprite.speed;
+            sprite.lifetime--;
+            
+            // Check wall collision
+            if (gameState.map[Math.floor(sprite.y)][Math.floor(sprite.x)] !== 0 || sprite.lifetime <= 0) {
+                // Create wall impact effect
+                if (gameState.map[Math.floor(sprite.y)][Math.floor(sprite.x)] !== 0) {
+                    gameState.sprites.push({
+                        type: 'impact',
+                        x: sprite.x,
+                        y: sprite.y,
+                        lifetime: 20,
+                        color: '#FFFF00'
+                    });
+                    audioManager.play('bullet_impact');
+                }
+                gameState.sprites.splice(i, 1);
+                continue;
+            }
+            
+            // Check enemy collision
+            for (let j = 0; j < gameState.sprites.length; j++) {
+                const enemy = gameState.sprites[j];
+                if (enemy.type === 'enemy' && enemy.state !== 'dead') {
+                    const bulletDist = Math.hypot(sprite.x - enemy.x, sprite.y - enemy.y);
+                    if (bulletDist < 0.3) {
+                        // Hit enemy
+                        enemy.health -= sprite.damage;
+                        enemy.isHit = 5;
+                        audioManager.play('enemy_damage');
+                        
+                        if (enemy.health <= 0 && enemy.state !== 'dead') {
+                            enemy.state = 'dead';
+                            p.score += ENEMY_TYPES[enemy.subType].score;
+                            if (enemy.subType === 'boss') {
+                                gameState.sprites.push({x: enemy.x, y: enemy.y, type: 'pickup', subType: 'key'});
+                                spawnExitDoor();
+                            }
+                        }
+                        
+                        // Remove bullet
+                        gameState.sprites.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+        } else if (sprite.type === 'impact') {
+            sprite.lifetime--;
+            if (sprite.lifetime <= 0) {
                 gameState.sprites.splice(i, 1);
             }
         }
@@ -573,6 +615,16 @@ function render() {
             } else if (sprite.type === 'projectile') {
                 spriteScale = 0.15;
                 spriteColor = sprite.color;
+            } else if (sprite.type === 'playerBullet') {
+                spriteScale = 0.1;
+                spriteColor = sprite.color;
+            } else if (sprite.type === 'impact') {
+                spriteScale = 0.2 + (20 - sprite.lifetime) * 0.02; // Grows over time
+                const alpha = sprite.lifetime / 20; // Fades over time
+                const r = parseInt(sprite.color.slice(1, 3), 16);
+                const g = parseInt(sprite.color.slice(3, 5), 16);
+                const b = parseInt(sprite.color.slice(5, 7), 16);
+                spriteColor = `rgba(${r}, ${g}, ${b}, ${alpha})`;
             }
 
             const spriteHeight = Math.abs(Math.floor(screenHeight / transformY)) * spriteScale;
@@ -583,7 +635,37 @@ function render() {
             for (let stripe = Math.floor(drawEndX - spriteWidth); stripe < Math.floor(drawEndX); stripe++) {
                 if (stripe >= 0 && stripe < screenWidth && transformY < gameState.zBuffer[stripe]) {
                     ctx.fillStyle = spriteColor;
-                    ctx.fillRect(stripe, drawStartY, 1, spriteHeight);
+                    
+                    // Special rendering for impact effects
+                    if (sprite.type === 'impact') {
+                        // Draw a burst pattern for impact effects
+                        const centerX = spriteScreenX;
+                        const centerY = drawStartY + spriteHeight / 2;
+                        const radius = spriteHeight / 2;
+                        
+                        ctx.beginPath();
+                        ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+                        ctx.fill();
+                        
+                        // Add some spark lines
+                        ctx.strokeStyle = spriteColor;
+                        ctx.lineWidth = 2;
+                        for (let spark = 0; spark < 6; spark++) {
+                            const angle = (spark / 6) * 2 * Math.PI;
+                            const sparkLength = radius * 1.5;
+                            ctx.beginPath();
+                            ctx.moveTo(centerX, centerY);
+                            ctx.lineTo(
+                                centerX + Math.cos(angle) * sparkLength,
+                                centerY + Math.sin(angle) * sparkLength
+                            );
+                            ctx.stroke();
+                        }
+                        break; // Don't draw the regular rectangle for impacts
+                    } else {
+                        ctx.fillRect(stripe, drawStartY, 1, spriteHeight);
+                    }
+                    
                     if (sprite.type === 'enemy' && sprite.state !== 'dead') {
                         const healthBarWidth = spriteWidth * (sprite.health / ENEMY_TYPES[sprite.subType].health);
                         ctx.fillStyle = 'red';
