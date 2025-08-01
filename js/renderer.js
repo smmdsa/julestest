@@ -282,17 +282,19 @@ function renderMinimap(p) {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fillRect(miniMapX, miniMapY, miniMapSize, miniMapSize);
 
-    // Render map walls
+    // Render map walls (flip Y-axis to match game world orientation)
     for (let y = 0; y < gameState.mapHeight; y++) {
         for (let x = 0; x < gameState.mapWidth; x++) {
             if (gameState.map[y][x] === 1) {
                 ctx.fillStyle = 'rgba(200, 200, 200, 0.6)';
-                ctx.fillRect(miniMapX + x * tileSize, miniMapY + y * tileSize, tileSize, tileSize);
+                // Flip Y coordinate: use (mapHeight - 1 - y) instead of y
+                const flippedY = gameState.mapHeight - 1 - y;
+                ctx.fillRect(miniMapX + x * tileSize, miniMapY + flippedY * tileSize, tileSize, tileSize);
             }
         }
     }
 
-    // Render sprites on minimap
+    // Render sprites on minimap (flip Y-axis to match game world orientation)
     for (let i = 0; i < gameState.sprites.length; i++) {
         const sprite = gameState.sprites[i];
         let color = null;
@@ -303,24 +305,27 @@ function renderMinimap(p) {
 
         if (color) {
             ctx.fillStyle = color;
-            ctx.fillRect(miniMapX + sprite.x * tileSize - 1, miniMapY + sprite.y * tileSize - 1, 3, 3);
+            // Flip Y coordinate: use (mapHeight - sprite.y) instead of sprite.y
+            const flippedSpriteY = gameState.mapHeight - sprite.y;
+            ctx.fillRect(miniMapX + sprite.x * tileSize - 1, miniMapY + flippedSpriteY * tileSize - 1, 3, 3);
         }
     }
 
-    // Render player on minimap
+    // Render player on minimap (flip Y-axis to match game world orientation)
     const playerMiniMapX = miniMapX + p.x * tileSize;
-    const playerMiniMapY = miniMapY + p.y * tileSize;
+    // Flip Y coordinate: use (mapHeight - p.y) instead of p.y
+    const playerMiniMapY = miniMapY + (gameState.mapHeight - p.y) * tileSize;
     ctx.fillStyle = 'yellow';
     ctx.fillRect(playerMiniMapX - 2, playerMiniMapY - 2, 4, 4);
 
-    // Draw player direction indicator
+    // Draw player direction indicator (flip Y direction to match game world orientation)
     ctx.strokeStyle = 'yellow';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(playerMiniMapX, playerMiniMapY);
     ctx.lineTo(
         playerMiniMapX + p.dirX * 5,
-        playerMiniMapY + p.dirY * 5
+        playerMiniMapY - p.dirY * 5  // Flip Y direction: use -p.dirY instead of +p.dirY
     );
     ctx.stroke();
 }

@@ -28,7 +28,7 @@ function gameLoop() {
 function startGame() {
     // Initialize all modules
     initializeGame();
-    
+
     // Generate the first level and start the game loop
     generateLevel(1).then(() => {
         gameLoop();
