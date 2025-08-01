@@ -4,103 +4,219 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Player Class Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .pass { background-color: #d4edda; color: #155724; }
+        .fail { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+    </style>
 </head>
 <body>
-    <div id="test-output"></div>
+    <h1>Player Class Test Suite</h1>
+    <div id="test-results"></div>
 
+    <!-- Load dependencies -->
     <script src="js/entities/Entity.js"></script>
     <script src="js/behaviors/MovementBehavior.js"></script>
     <script src="js/entities/Player.js"></script>
     
     <script>
-        // Mock global constants for testing
+        // Mock global dependencies
         window.MAX_HEALTH = 100;
         window.MAX_SHIELD = 100;
         window.MAX_AMMO_CARRY = 200;
         
-        // Mock gameState for collision detection
-        window.gameState = {
-            map: [
-                [1, 1, 1, 1, 1],
-                [1, 0, 0, 0, 1],
-                [1, 0, 0, 0, 1],
-                [1, 0, 0, 0, 1],
-                [1, 1, 1, 1, 1]
-            ],
-            mapWidth: 5,
-            mapHeight: 5
+        // Mock audio manager
+        window.audioManager = {
+            play: function(sound) {
+                console.log(`Playing sound: ${sound}`);
+            }
         };
         
-        // Mock keys object
-        window.keys = {};
-        
-        function runTests() {
-            const output = document.getElementById('test-output');
-            let testResults = [];
-            
-            try {
-                // Test 1: Player creation
-                const player = new Player(2.5, 2.5);
-                testResults.push(`✓ Player created successfully at position (${player.x}, ${player.y})`);
-                
-                // Test 2: Check initial properties
-                testResults.push(`✓ Player health: ${player.health}/${player.maxHealth}`);
-                testResults.push(`✓ Player shield: ${player.shield}/${player.maxShield}`);
-                testResults.push(`✓ Player ammo: ${player.ammo}/${player.maxAmmo}`);
-                testResults.push(`✓ Player score: ${player.score}`);
-                testResults.push(`✓ Player hasKey: ${player.hasKey}`);
-                
-                // Test 3: Check direction vectors
-                testResults.push(`✓ Player direction: (${player.dirX}, ${player.dirY})`);
-                testResults.push(`✓ Player plane: (${player.planeX}, ${player.planeY})`);
-                
-                // Test 4: Check behavior composition
-                const movementBehavior = player.getBehavior('movement');
-                if (movementBehavior) {
-                    testResults.push(`✓ Movement behavior attached: ${movementBehavior.constructor.name}`);
-                } else {
-                    testResults.push(`✗ Movement behavior not found`);
-                }
-                
-                // Test 5: Test getter methods
-                const position = player.getPosition();
-                testResults.push(`✓ getPosition(): x=${position.x}, y=${position.y}, dirX=${position.dirX}, dirY=${position.dirY}`);
-                
-                const health = player.getHealth();
-                testResults.push(`✓ getHealth(): ${health.current}/${health.max} (${Math.round(health.percentage * 100)}%)`);
-                
-                const ammo = player.getAmmo();
-                testResults.push(`✓ getAmmo(): ${ammo.current}/${ammo.max} (${Math.round(ammo.percentage * 100)}%)`);
-                
-                // Test 6: Test pickup collection
-                const healthPickup = { subType: 'health' };
-                player.health = 50; // Reduce health to test pickup
-                const collected = player.collectPickup(healthPickup);
-                testResults.push(`✓ Health pickup collected: ${collected}, new health: ${player.health}`);
-                
-                // Test 7: Test damage system
-                const initialHealth = player.health;
-                const initialShield = player.shield;
-                player.shield = 25; // Add some shield
-                player.takeDamage(30);
-                testResults.push(`✓ Damage test: Health ${initialHealth}→${player.health}, Shield ${initialShield}→${player.shield}`);
-                
-                // Test 8: Test player state getter
-                const playerState = player.getPlayerState();
-                testResults.push(`✓ getPlayerState() returned object with ${Object.keys(playerState).length} properties`);
-                
-                testResults.push(`\n✓ All tests completed successfully!`);
-                
-            } catch (error) {
-                testResults.push(`✗ Error during testing: ${error.message}`);
-                console.error('Test error:', error);
+        // Mock weapon manager
+        window.weaponManager = {
+            shoot: function(player) {
+                console.log('Weapon manager shoot called');
+                return true;
+            },
+            startReload: function() {
+                console.log('Weapon manager reload called');
+                return true;
+            },
+            switchWeapon: function(type) {
+                console.log(`Weapon manager switch to: ${type}`);
+                return true;
+            },
+            pickupWeapon: function(type) {
+                console.log(`Weapon manager pickup: ${type}`);
+                return true;
             }
-            
-            output.innerHTML = '<pre>' + testResults.join('\n') + '</pre>';
+        };
+
+        const results = document.getElementById('test-results');
+        
+        function addResult(message, passed, info = '') {
+            const div = document.createElement('div');
+            div.className = `test-result ${passed ? 'pass' : 'fail'}`;
+            div.innerHTML = `${passed ? '✓' : '✗'} ${message}${info ? '<br><small>' + info + '</small>' : ''}`;
+            results.appendChild(div);
         }
         
-        // Run tests when page loads
-        window.addEventListener('load', runTests);
+        function addInfo(message) {
+            const div = document.createElement('div');
+            div.className = 'test-result info';
+            div.innerHTML = `ℹ ${message}`;
+            results.appendChild(div);
+        }
+
+        // Test Player class creation
+        addInfo('Testing Player Class Creation...');
+        try {
+            const player = new Player(5, 5);
+            addResult('Player instance created successfully', true);
+            addResult('Player has correct initial health', player.health === 100);
+            addResult('Player has correct initial shield', player.shield === 0);
+            addResult('Player has correct initial ammo', player.ammo === 200);
+            addResult('Player has correct initial score', player.score === 0);
+            addResult('Player has correct initial key status', player.hasKey === false);
+        } catch (error) {
+            addResult('Player instance creation failed', false, error.message);
+        }
+
+        // Test damage system
+        addInfo('Testing Damage System...');
+        try {
+            const player = new Player(5, 5);
+            
+            // Test basic damage
+            player.takeDamage(20);
+            addResult('Basic damage applied correctly', player.health === 80);
+            addResult('Hit effect activated', player.isHit > 0);
+            
+            // Test shield damage
+            player.shield = 50;
+            player.health = 100;
+            player.takeDamage(30);
+            addResult('Shield absorbed damage correctly', player.shield === 20 && player.health === 100);
+            
+            // Test shield + health damage
+            player.shield = 10;
+            player.health = 100;
+            player.takeDamage(30);
+            addResult('Shield + health damage applied correctly', player.shield === 0 && player.health === 80);
+            
+            // Test death
+            player.health = 10;
+            player.shield = 0;
+            let deathCalled = false;
+            player.onEntityDeath = function() { deathCalled = true; };
+            player.takeDamage(20);
+            addResult('Death triggered correctly', player.health === 0 && deathCalled);
+            
+        } catch (error) {
+            addResult('Damage system test failed', false, error.message);
+        }
+
+        // Test pickup system
+        addInfo('Testing Pickup System...');
+        try {
+            const player = new Player(5, 5);
+            
+            // Test ammo pickup
+            player.ammo = 150;
+            const ammoPickup = { type: 'pickup', subType: 'ammo' };
+            const ammoCollected = player.collectPickup(ammoPickup);
+            addResult('Ammo pickup collected', ammoCollected && player.ammo === 180);
+            addResult('Score increased for ammo', player.score === 10);
+            
+            // Test health pickup
+            player.health = 75;
+            const healthPickup = { type: 'pickup', subType: 'health' };
+            const healthCollected = player.collectPickup(healthPickup);
+            addResult('Health pickup collected', healthCollected && player.health === 100);
+            
+            // Test shield pickup
+            player.shield = 30;
+            const shieldPickup = { type: 'pickup', subType: 'shield' };
+            const shieldCollected = player.collectPickup(shieldPickup);
+            addResult('Shield pickup collected', shieldCollected && player.shield === 80);
+            
+            // Test key pickup
+            const keyPickup = { type: 'pickup', subType: 'key' };
+            const keyCollected = player.collectPickup(keyPickup);
+            addResult('Key pickup collected', keyCollected && player.hasKey === true);
+            
+            // Test weapon pickup
+            const weaponPickup = { type: 'pickup', subType: 'shotgun' };
+            const weaponCollected = player.collectPickup(weaponPickup);
+            addResult('Weapon pickup collected', weaponCollected);
+            
+            // Test pickup when full
+            player.ammo = 200;
+            const fullAmmoPickup = { type: 'pickup', subType: 'ammo' };
+            const fullAmmoCollected = player.collectPickup(fullAmmoPickup);
+            addResult('Full ammo pickup rejected', !fullAmmoCollected);
+            
+        } catch (error) {
+            addResult('Pickup system test failed', false, error.message);
+        }
+
+        // Test weapon integration
+        addInfo('Testing Weapon Integration...');
+        try {
+            const player = new Player(5, 5);
+            
+            const shootResult = player.shoot();
+            addResult('Shoot method works', shootResult === true);
+            
+            const reloadResult = player.reload();
+            addResult('Reload method works', reloadResult === true);
+            
+            const switchResult = player.switchWeapon('shotgun');
+            addResult('Switch weapon method works', switchResult === true);
+            
+            const pickupResult = player.pickupWeapon('machinegun');
+            addResult('Pickup weapon method works', pickupResult === true);
+            
+        } catch (error) {
+            addResult('Weapon integration test failed', false, error.message);
+        }
+
+        // Test utility methods
+        addInfo('Testing Utility Methods...');
+        try {
+            const player = new Player(5, 5);
+            
+            // Test getter methods
+            const position = player.getPosition();
+            addResult('getPosition works', position.x === 5 && position.y === 5);
+            
+            const health = player.getHealth();
+            addResult('getHealth works', health.current === 100 && health.max === 100);
+            
+            const ammo = player.getAmmo();
+            addResult('getAmmo works', ammo.current === 200 && ammo.max === 200);
+            
+            const score = player.getScore();
+            addResult('getScore works', score === 0);
+            
+            const hasKey = player.getHasKey();
+            addResult('getHasKey works', hasKey === false);
+            
+            // Test state methods
+            const canAct = player.canAct();
+            addResult('canAct works when alive', canAct === true);
+            
+            player.health = 0;
+            const cannotAct = player.canAct();
+            addResult('canAct works when dead', cannotAct === false);
+            
+        } catch (error) {
+            addResult('Utility methods test failed', false, error.message);
+        }
+
+        addInfo('All tests completed!');
     </script>
 </body>
 </html>

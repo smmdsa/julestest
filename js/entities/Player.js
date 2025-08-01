@@ -77,12 +77,14 @@ class Player extends Entity {
      * @param {Object} keys - Key state object
      */
     handleActionInput(keys) {
+        if (!this.canAct()) return;
+        
         // Reload input
         if (keys['KeyR']) {
             this.reload();
         }
         
-        // Weapon switching input
+        // Weapon switching input (only if player can act)
         if (keys['Digit1']) {
             this.switchWeapon('pistol');
         }
@@ -114,16 +116,18 @@ class Player extends Entity {
      * @param {Object} source - Source of the damage
      */
     takeDamage(amount, source = null) {
-        if (!this.isActive) return;
+        if (!this.isActive || amount <= 0) return;
         
-        // Calculate shield absorption
+        // Calculate shield absorption first
         const shieldDamage = Math.min(this.shield, amount);
         this.shield -= shieldDamage;
-        const healthDamage = amount - shieldDamage;
         
         // Apply remaining damage to health
+        const healthDamage = amount - shieldDamage;
         this.health -= healthDamage;
-        this.isHit = 10; // Set hit effect duration
+        
+        // Set hit effect duration
+        this.isHit = 10;
         
         // Ensure health doesn't go below 0
         if (this.health < 0) {
@@ -135,7 +139,7 @@ class Player extends Entity {
             window.audioManager.play('player_damage');
         }
         
-        // Call parent damage handling
+        // Call parent damage handling for any additional logic
         this.onTakeDamage(amount, source);
         
         // Check if player should die
@@ -149,12 +153,23 @@ class Player extends Entity {
      * @param {Object} source - Source that caused death
      */
     onEntityDeath(source) {
+        // Ensure player is marked as inactive
+        this.isActive = false;
+        
         // Game over logic
         const finalScore = this.score;
         const currentLevel = window.gameState ? window.gameState.currentLevel : 1;
         
-        alert(`GAME OVER! Final Score: ${finalScore} on Level ${currentLevel}`);
-        document.location.reload();
+        // Play death sound if available
+        if (window.audioManager && window.audioManager.play) {
+            window.audioManager.play('player_death');
+        }
+        
+        // Show game over message and restart
+        setTimeout(() => {
+            alert(`GAME OVER! Final Score: ${finalScore} on Level ${currentLevel}`);
+            document.location.reload();
+        }, 100); // Small delay to ensure sound plays
     }
     
     /**
@@ -163,48 +178,64 @@ class Player extends Entity {
      * @returns {boolean} True if pickup was collected
      */
     collectPickup(pickup) {
-        if (!pickup || !pickup.subType) return false;
+        if (!pickup || !pickup.subType || !this.isActive) return false;
         
         let collected = false;
+        let scoreGained = 0;
         
         switch (pickup.subType) {
             case 'ammo':
                 if (this.ammo < this.maxAmmo) {
-                    this.ammo = Math.min(this.maxAmmo, this.ammo + 30);
-                    this.score += 10;
+                    const ammoGained = Math.min(30, this.maxAmmo - this.ammo);
+                    this.ammo += ammoGained;
+                    scoreGained = 10;
                     collected = true;
                 }
                 break;
                 
             case 'health':
                 if (this.health < this.maxHealth) {
-                    this.health = Math.min(this.maxHealth, this.health + 25);
-                    this.score += 10;
+                    const healthGained = Math.min(25, this.maxHealth - this.health);
+                    this.health += healthGained;
+                    scoreGained = 10;
                     collected = true;
                 }
                 break;
                 
             case 'shield':
                 if (this.shield < this.maxShield) {
-                    this.shield = Math.min(this.maxShield, this.shield + 50);
-                    this.score += 10;
+                    const shieldGained = Math.min(50, this.maxShield - this.shield);
+                    this.shield += shieldGained;
+                    scoreGained = 10;
                     collected = true;
                 }
                 break;
                 
             case 'key':
-                this.hasKey = true;
-                this.score += 500;
-                collected = true;
+                if (!this.hasKey) {
+                    this.hasKey = true;
+                    scoreGained = 500;
+                    collected = true;
+                }
                 break;
                 
             case 'shotgun':
             case 'machinegun':
                 if (this.pickupWeapon(pickup.subType)) {
-                    this.score += 100;
+                    scoreGained = 100;
                     collected = true;
                 }
                 break;
+                
+            default:
+                // Unknown pickup type
+                console.warn(`Unknown pickup type: ${pickup.subType}`);
+                return false;
+        }
+        
+        // Add score if pickup was collected
+        if (collected && scoreGained > 0) {
+            this.addScore(scoreGained);
         }
         
         // Play pickup sound if collected
@@ -217,30 +248,42 @@ class Player extends Entity {
     
     /**
      * Shoot current weapon
+     * @returns {boolean} True if weapon was fired successfully
      */
     shoot() {
+        if (!this.isActive) return false;
+        
         if (window.weaponManager && window.weaponManager.shoot) {
-            window.weaponManager.shoot(this);
+            return window.weaponManager.shoot(this);
         }
+        return false;
     }
     
     /**
      * Reload current weapon
+     * @returns {boolean} True if reload was started successfully
      */
     reload() {
+        if (!this.isActive) return false;
+        
         if (window.weaponManager && window.weaponManager.startReload) {
-            window.weaponManager.startReload();
+            return window.weaponManager.startReload();
         }
+        return false;
     }
     
     /**
      * Switch to a different weapon
      * @param {string} weaponType - Type of weapon to switch to
+     * @returns {boolean} True if weapon was switched successfully
      */
     switchWeapon(weaponType) {
+        if (!this.isActive) return false;
+        
         if (window.weaponManager && window.weaponManager.switchWeapon) {
-            window.weaponManager.switchWeapon(weaponType);
+            return window.weaponManager.switchWeapon(weaponType);
         }
+        return false;
     }
     
     /**
@@ -249,6 +292,8 @@ class Player extends Entity {
      * @returns {boolean} True if weapon was picked up
      */
     pickupWeapon(weaponType) {
+        if (!this.isActive) return false;
+        
         if (window.weaponManager && window.weaponManager.pickupWeapon) {
             return window.weaponManager.pickupWeapon(weaponType);
         }
@@ -361,7 +406,35 @@ class Player extends Entity {
      * @param {number} points - Points to add
      */
     addScore(points) {
-        this.score += points;
+        if (points > 0) {
+            this.score += points;
+        }
+    }
+    
+    /**
+     * Get current weapon information from weapon manager
+     * @returns {Object} Current weapon info or null
+     */
+    getCurrentWeaponInfo() {
+        if (window.weaponManager && window.weaponManager.getCurrentWeapon) {
+            return {
+                weapon: window.weaponManager.getCurrentWeapon(),
+                state: window.weaponManager.getCurrentWeaponState(),
+                ammoDisplay: window.weaponManager.getAmmoDisplay(),
+                weaponName: window.weaponManager.getWeaponName(),
+                isReloading: window.weaponManager.isReloading,
+                reloadProgress: window.weaponManager.getReloadProgress()
+            };
+        }
+        return null;
+    }
+    
+    /**
+     * Check if player can perform actions (not dead, not reloading, etc.)
+     * @returns {boolean} True if player can act
+     */
+    canAct() {
+        return this.isActive && this.health > 0;
     }
     
     /**
@@ -402,11 +475,22 @@ class Player extends Entity {
      * @returns {boolean} True if ammo was available and used
      */
     useAmmo(amount) {
+        if (!this.isActive || amount <= 0) return false;
+        
         if (this.ammo >= amount) {
             this.ammo -= amount;
             return true;
         }
         return false;
+    }
+    
+    /**
+     * Check if player has enough ammo
+     * @param {number} amount - Amount of ammo to check
+     * @returns {boolean} True if player has enough ammo
+     */
+    hasAmmo(amount) {
+        return this.ammo >= amount;
     }
     
     /**
