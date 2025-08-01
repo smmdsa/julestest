@@ -252,7 +252,6 @@ class PlayerMovementBehavior extends MovementBehavior {
         
         // Player-specific movement properties
         this.rotSpeed = config.rotSpeed || 0.03;
-        this.stepTimer = 0;
         this.stepSoundInterval = 15; // Frames between step sounds
     }
     
@@ -264,32 +263,7 @@ class PlayerMovementBehavior extends MovementBehavior {
         if (!this.entity || !window.keys) return;
         
         const keys = window.keys;
-        let moved = false;
-        
-        // Get player direction vectors (assuming player has dirX, dirY, planeX, planeY)
-        const dirX = this.entity.dirX || 0;
-        const dirY = this.entity.dirY || 0;
-        const planeX = this.entity.planeX || 0;
-        const planeY = this.entity.planeY || 0;
-        
-        // Forward/backward movement
-        if (keys['KeyW'] || keys['ArrowUp']) {
-            moved = this.move(dirX, dirY) || moved;
-        }
-        if (keys['KeyS'] || keys['ArrowDown']) {
-            moved = this.move(-dirX, -dirY) || moved;
-        }
-        
-        // Strafe movement
-        if (keys['KeyD']) {
-            moved = this.move(planeX, planeY) || moved;
-        }
-        if (keys['KeyA']) {
-            moved = this.move(-planeX, -planeY) || moved;
-        }
-        
-        // Handle step sounds
-        this.handleStepSounds(moved);
+        this.handleInput(keys);
     }
     
     /**
@@ -297,26 +271,35 @@ class PlayerMovementBehavior extends MovementBehavior {
      * @param {boolean} isMoving - Whether the player is currently moving
      */
     handleStepSounds(isMoving) {
+        if (!this.entity) return;
+        
         if (isMoving) {
-            this.stepTimer++;
-            if (this.stepTimer >= this.stepSoundInterval) {
-                // Play step sound if audio manager is available
-                if (window.audioManager && window.audioManager.play) {
-                    window.audioManager.play('step');
+            // Use the player's stepTimer property
+            if (this.entity.stepTimer !== undefined) {
+                this.entity.stepTimer++;
+                if (this.entity.stepTimer >= this.stepSoundInterval) {
+                    // Play step sound if audio manager is available
+                    if (window.audioManager && window.audioManager.play) {
+                        window.audioManager.play('step');
+                    }
+                    this.entity.stepTimer = 0;
                 }
-                this.stepTimer = 0;
             }
         } else {
-            this.stepTimer = 0;
+            // Reset step timer when not moving
+            if (this.entity.stepTimer !== undefined) {
+                this.entity.stepTimer = 0;
+            }
         }
     }
     
     /**
      * Handle input for player movement (can be called directly)
      * @param {Object} inputKeys - Key state object
+     * @returns {boolean} True if any movement occurred
      */
     handleInput(inputKeys) {
-        if (!inputKeys || !this.entity) return;
+        if (!inputKeys || !this.entity) return false;
         
         let moved = false;
         

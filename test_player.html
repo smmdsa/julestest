@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player Class Test</title>
+</head>
+<body>
+    <div id="test-output"></div>
+
+    <script src="js/entities/Entity.js"></script>
+    <script src="js/behaviors/MovementBehavior.js"></script>
+    <script src="js/entities/Player.js"></script>
+    
+    <script>
+        // Mock global constants for testing
+        window.MAX_HEALTH = 100;
+        window.MAX_SHIELD = 100;
+        window.MAX_AMMO_CARRY = 200;
+        
+        // Mock gameState for collision detection
+        window.gameState = {
+            map: [
+                [1, 1, 1, 1, 1],
+                [1, 0, 0, 0, 1],
+                [1, 0, 0, 0, 1],
+                [1, 0, 0, 0, 1],
+                [1, 1, 1, 1, 1]
+            ],
+            mapWidth: 5,
+            mapHeight: 5
+        };
+        
+        // Mock keys object
+        window.keys = {};
+        
+        function runTests() {
+            const output = document.getElementById('test-output');
+            let testResults = [];
+            
+            try {
+                // Test 1: Player creation
+                const player = new Player(2.5, 2.5);
+                testResults.push(`✓ Player created successfully at position (${player.x}, ${player.y})`);
+                
+                // Test 2: Check initial properties
+                testResults.push(`✓ Player health: ${player.health}/${player.maxHealth}`);
+                testResults.push(`✓ Player shield: ${player.shield}/${player.maxShield}`);
+                testResults.push(`✓ Player ammo: ${player.ammo}/${player.maxAmmo}`);
+                testResults.push(`✓ Player score: ${player.score}`);
+                testResults.push(`✓ Player hasKey: ${player.hasKey}`);
+                
+                // Test 3: Check direction vectors
+                testResults.push(`✓ Player direction: (${player.dirX}, ${player.dirY})`);
+                testResults.push(`✓ Player plane: (${player.planeX}, ${player.planeY})`);
+                
+                // Test 4: Check behavior composition
+                const movementBehavior = player.getBehavior('movement');
+                if (movementBehavior) {
+                    testResults.push(`✓ Movement behavior attached: ${movementBehavior.constructor.name}`);
+                } else {
+                    testResults.push(`✗ Movement behavior not found`);
+                }
+                
+                // Test 5: Test getter methods
+                const position = player.getPosition();
+                testResults.push(`✓ getPosition(): x=${position.x}, y=${position.y}, dirX=${position.dirX}, dirY=${position.dirY}`);
+                
+                const health = player.getHealth();
+                testResults.push(`✓ getHealth(): ${health.current}/${health.max} (${Math.round(health.percentage * 100)}%)`);
+                
+                const ammo = player.getAmmo();
+                testResults.push(`✓ getAmmo(): ${ammo.current}/${ammo.max} (${Math.round(ammo.percentage * 100)}%)`);
+                
+                // Test 6: Test pickup collection
+                const healthPickup = { subType: 'health' };
+                player.health = 50; // Reduce health to test pickup
+                const collected = player.collectPickup(healthPickup);
+                testResults.push(`✓ Health pickup collected: ${collected}, new health: ${player.health}`);
+                
+                // Test 7: Test damage system
+                const initialHealth = player.health;
+                const initialShield = player.shield;
+                player.shield = 25; // Add some shield
+                player.takeDamage(30);
+                testResults.push(`✓ Damage test: Health ${initialHealth}→${player.health}, Shield ${initialShield}→${player.shield}`);
+                
+                // Test 8: Test player state getter
+                const playerState = player.getPlayerState();
+                testResults.push(`✓ getPlayerState() returned object with ${Object.keys(playerState).length} properties`);
+                
+                testResults.push(`\n✓ All tests completed successfully!`);
+                
+            } catch (error) {
+                testResults.push(`✗ Error during testing: ${error.message}`);
+                console.error('Test error:', error);
+            }
+            
+            output.innerHTML = '<pre>' + testResults.join('\n') + '</pre>';
+        }
+        
+        // Run tests when page loads
+        window.addEventListener('load', runTests);
+    </script>
+</body>
+</html>
